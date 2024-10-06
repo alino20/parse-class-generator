@@ -1,0 +1,30 @@
+{
+  "name": "parse-class-generator",
+  "version": "1.0.0",
+  "description": "Tool to generate Typescript class declarations automatically from schema",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "mocha"
+  },
+  "keywords": [
+    "parse",
+    "typescript"
+  ],
+  "author": "Ali Nosrati",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^22.7.4",
+    "parse": "^5.3.0",
+    "prettier": "^3.3.3"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.8",
+    "@types/parse": "^3.0.9",
+    "dotenv": "^16.4.5",
+    "mocha": "^10.7.3",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.6.2"
+  }
+}
