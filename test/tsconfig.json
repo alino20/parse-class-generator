@@ -12,7 +12,8 @@
       "@test/*": ["test/*"]
     },
     "allowJs": true,
+    "checkJs": true,
     "moduleResolution": "node"
   },
-  "include": ["test.spec.js"]
+  "include": ["*.spec.js"]
 }

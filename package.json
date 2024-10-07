@@ -4,8 +4,10 @@
   "description": "Tool to generate Typescript class declarations automatically from schema",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
-    "test": "mocha"
+    "build": "npm run clean && tsc && npm run copy",
+    "test": "mocha",
+    "clean": "rimraf ./dist",
+    "copy": "copyfiles -u 1 ./src/types.d.ts ./dist/"
   },
   "keywords": [
     "parse",
@@ -21,8 +23,11 @@
   "devDependencies": {
     "@types/mocha": "^10.0.8",
     "@types/parse": "^3.0.9",
+    "copyfiles": "^2.4.1",
     "dotenv": "^16.4.5",
+    "fast-check": "^3.22.0",
     "mocha": "^10.7.3",
+    "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.6.2"

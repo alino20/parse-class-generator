@@ -13,7 +13,7 @@ module.exports = {
   // delay: true,
   "check-leaks": true,
   sort: true,
-  spec: ["test/test.spec.js"],
+  spec: ["test/**/*.spec.js"],
 
   // 'watch-files': ['test/**/*.spec.js'],
 };
