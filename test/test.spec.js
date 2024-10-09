@@ -6,6 +6,7 @@ import { existsSync, rmSync } from "fs";
 import path from "path";
 import fc from "fast-check";
 import { spawnSync } from "child_process";
+import { TEST_SCHEMA } from "./schema";
 
 const { APP_ID, SERVER_URL, MASTER_KEY } = process.env;
 
@@ -39,7 +40,8 @@ describe("Test Parse Class Generator", function () {
   this.beforeAll(async function () {
     this.timeout(10000);
     // return;
-    const fetched = await Parse.Schema.all();
+    // const fetched = await Parse.Schema.all();
+    const fetched = TEST_SCHEMA;
 
     fetched.forEach((schema) => {
       console.log("ClassName:", schema.className);
@@ -65,6 +67,25 @@ describe("Test Parse Class Generator", function () {
 
   describe("test with modified built-in classes", function () {
     const outFilePath = path.join("types", "modified-classes.ts");
+
+    /**
+     * @type {Parse.RestSchema[]}
+     */
+    const builtInSchemas = [];
+
+    this.beforeAll(async function () {
+      this.timeout(10000);
+      const fetched = await Parse.Schema.all();
+      fetched
+        .filter((schema) =>
+          ["_User", "_Role", "_Session"].includes(schema.className)
+        )
+        .forEach((schema) => {
+          builtInSchemas.push(schema);
+        });
+    });
+
+    const extendedSchema = schemas.concat(builtInSchemas);
 
     it("Should generate valid files", async function () {
       this.timeout(0);
@@ -102,7 +123,7 @@ describe("Test Parse Class Generator", function () {
               `_${timeInMS}.ts`
             );
 
-            await generator.createTsFile(schemas, uniqueFilePath);
+            await generator.createTsFile(extendedSchema, uniqueFilePath);
             compile(uniqueFilePath);
             rmSync(uniqueFilePath);
           }

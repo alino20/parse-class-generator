@@ -49,11 +49,17 @@ const getBaseClass = (className: string): string => {
 };
 
 /**
- * Generates a TypeScript class from a Parse schema.
+ * Generator class used for creating definition files.
  */
 export class ParseClassGenerator {
   builtInNames: Partial<Record<ParseUnionType, string>> = {};
 
+  /**
+   * Create an instance of generator class
+   * @param modifiedClasses Indicates which built-in classes are modified.
+   *  only provide this argument when you have modified built-in Parse classes. (User, Role, Session)
+   * @returns
+   */
   constructor(modifiedClasses?: BuiltInClassParams) {
     if (!modifiedClasses) return this;
 
@@ -146,6 +152,11 @@ export class ParseClassGenerator {
     return `Parse.Relation<${thisClassName}, ${targetClassName}> | null`;
   }
 
+  /**
+   * Create class definition for a single class schema
+   * @param schema a Parse class schema object
+   * @returns a string of class definitions or null (for built-in classes if not specified in the constructor)
+   */
   generateClass(schema: Parse.RestSchema): string | null {
     const className = schema.className;
 
@@ -241,8 +252,11 @@ export class ParseClassGenerator {
   }
 
   /**
-   *
-   * @param filePath path to generated typescript file
+   * create typescript file containing class defintions
+   * @param schemas your Parse schema
+   * @param filePath path to the output file
+   * @param env usage environment of decleration file.
+   *  determines the `import` statement at the top of the file.
    */
   async createTsFile(
     schemas: ReadonlyArray<Parse.RestSchema>,
