@@ -13,7 +13,7 @@ function ensureDir(path: string) {
 }
 
 // Static default values for each field type
-const DEFAULT_VALUES: Record<string, any> = {
+const DEFAULT_VALUES: Record<string, unknown> = {
   Number: 0,
   String: "",
   Boolean: false,
@@ -48,37 +48,13 @@ const getBaseClass = (className: string): string => {
     : "Parse.Object";
 };
 
-async function fetchSchemas(): Promise<Parse.RestSchema[]> {
-  const schemas = await Parse.Schema.all();
-  return schemas;
-}
-
 /**
  * Generates a TypeScript class from a Parse schema.
  */
 export class ParseClassGenerator {
-  appId: string;
-  masterKey: string;
-  serverUrl: string;
   builtInNames: Partial<Record<ParseUnionType, string>> = {};
 
-  /**
-   *
-   * @param appId Parse Server App ID
-   * @param masterKey Parse Server Master Key
-   * @param serverUrl Parse Server URL
-   * @param modifiedClasses an object to determine modified built-in classes
-   */
-  constructor(
-    appId: string,
-    masterKey: string,
-    serverUrl: string,
-    modifiedClasses?: BuiltInClassParams
-  ) {
-    this.appId = appId;
-    this.masterKey = masterKey;
-    this.serverUrl = serverUrl;
-
+  constructor(modifiedClasses?: BuiltInClassParams) {
     if (!modifiedClasses) return this;
 
     PARSE_CLASSES.forEach((key) => {
@@ -152,18 +128,22 @@ export class ParseClassGenerator {
     return `${targetClassName} | null`;
   }
 
-  private getRelationType(details: {
-    type: string;
-    targetClass?: string;
-    required?: boolean;
-    defaultValue?: string;
-  }) {
+  private getRelationType(
+    className: string,
+    details: {
+      type: string;
+      targetClass?: string;
+      required?: boolean;
+      defaultValue?: string;
+    }
+  ) {
     if (!details.targetClass) {
       throw new Error("Target class is required for Pointer type");
     }
 
+    const thisClassName = this.getTargetClassName(className);
     const targetClassName = this.getTargetClassName(details.targetClass);
-    return `Parse.Relation<${targetClassName}> | null`;
+    return `Parse.Relation<${thisClassName}, ${targetClassName}> | null`;
   }
 
   generateClass(schema: Parse.RestSchema): string | null {
@@ -203,7 +183,8 @@ export class ParseClassGenerator {
           type = this.getPointerType(details);
           break;
         case "Relation":
-          type = this.getRelationType(details);
+          type = this.getRelationType(className, details);
+          break;
         case "Array":
           type = "SerializableArray";
           break;
@@ -216,12 +197,19 @@ export class ParseClassGenerator {
         case "GeoPoint":
           type = "Parse.GeoPoint";
           break;
+        case "Polygon":
+          type = "Parse.Polygon";
+          break;
         default:
           console.warn("Type not found:", details.type);
           type = "any";
       }
 
       const optional = details.required ? "" : "?";
+
+      if (type.includes(" | null") && optional) {
+        type = type.replace(" | null", "");
+      }
       props.push(`${name}${optional}: ${type};`);
 
       if (details.required) {
@@ -231,7 +219,9 @@ export class ParseClassGenerator {
         } else if (details.type === "GeoPoint") {
           defaultValue = `new Parse.GeoPoint(0, 0)`;
         } else {
-          defaultValue = details.defaultValue ?? DEFAULT_VALUES[details.type];
+          defaultValue =
+            details.defaultValue ??
+            (DEFAULT_VALUES[details.type] as string | boolean | number);
         }
         defaultValues.push(`${name}: ${defaultValue}`);
       }
@@ -254,21 +244,11 @@ export class ParseClassGenerator {
    *
    * @param filePath path to generated typescript file
    */
-  async generateClasses(
-    filePath: string = path.join(__dirname, "ParseClasses.ts")
+  async createTsFile(
+    schemas: ReadonlyArray<Parse.RestSchema>,
+    filePath: string = path.join(__dirname, "ParseClasses.ts"),
+    env: "node" | "browser" | "react-native" = "node"
   ) {
-    if (!this.appId || !this.masterKey || !this.serverUrl) {
-      throw new Error(
-        "Missing required parameters: appId, masterKey, serverUrl"
-      );
-    }
-    // Initialize Parse with environment variables
-    Parse.initialize(this.appId);
-    Parse.masterKey = this.masterKey;
-    Parse.serverURL = this.serverUrl;
-
-    const schemas = await fetchSchemas();
-
     const toExport: string[] = [];
     const toRegister: string[] = [];
 
@@ -292,7 +272,13 @@ export class ParseClassGenerator {
       "utf8"
     );
 
-    const parseImport = "import Parse from 'parse'";
+    const envMap = {
+      node: "parse/node",
+      browser: "parse",
+      "react-native": "parse/react-native",
+    };
+
+    const parseImport = `import Parse from "${envMap[env]}"`;
 
     const output = `${parseImport}\n\n
     ${helperTypes}\n\n
