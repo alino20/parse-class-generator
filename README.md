@@ -2,8 +2,7 @@
 
 [![npm version](https://badge.fury.io/js/parse-class-generator.svg)](https://badge.fury.io/js/parse-class-generator)
 
-**Description:**
-Generate Typescript class defintions and declaration files for your Parse project. this package automatically creates the required files to be develop your application with Javascript/Typescript in a type safe manner, and also get code completion.
+Generate Typescript class defintions and declaration files for your Parse project. this package automatically creates the required files to develop your application with Javascript/Typescript in a type-safe manner, and also get code completion.
 
 ## Installation
 
@@ -189,8 +188,6 @@ class ParseClassGenerator {
   - determines the `import` statement at the top of the file.
 
 ## Examples
-
-Provide more examples, especially for common use cases or integration into projects.
 
 ```javascript
 // Example of modified built-in classes
