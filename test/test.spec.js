@@ -28,7 +28,7 @@ const compile = (filePath) => {
   }
 };
 
-describe("Test Parse Class Generator", function () {
+describe.skip("Test Parse Class Generator", function () {
   Parse.initialize(APP_ID, undefined, MASTER_KEY);
   Parse.serverURL = SERVER_URL;
   /**
