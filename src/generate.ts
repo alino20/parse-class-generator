@@ -126,12 +126,7 @@ export class ParseClassGenerator {
     `;
   }
 
-  private getPointerType(details: {
-    type: string;
-    targetClass?: string;
-    required?: boolean;
-    defaultValue?: string;
-  }) {
+  private getPointerType(details: SchemaDetails) {
     if (!details.targetClass) {
       throw new Error("Target class is required for Pointer type");
     }
@@ -141,15 +136,7 @@ export class ParseClassGenerator {
     return `${targetClassName} | null`;
   }
 
-  private getRelationType(
-    className: string,
-    details: {
-      type: string;
-      targetClass?: string;
-      required?: boolean;
-      defaultValue?: string;
-    }
-  ) {
+  private getRelationType(className: string, details: SchemaDetails) {
     if (!details.targetClass) {
       throw new Error("Target class is required for Pointer type");
     }
