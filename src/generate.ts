@@ -3,6 +3,13 @@ import * as path from "path";
 import Parse from "parse/node";
 import prettier from "prettier";
 
+interface SchemaDetails {
+  type: string;
+  targetClass?: string;
+  required?: boolean;
+  defaultValue?: string;
+}
+
 /**
  * Recursively create a directory at the given `path`.
  *
@@ -152,12 +159,77 @@ export class ParseClassGenerator {
     return `Parse.Relation<${thisClassName}, ${targetClassName}> | null`;
   }
 
+  generateAttributes(schema: Parse.RestSchema): string {
+    const attributes = schema.fields;
+    const props: string[] = [];
+
+    for (const [name, details] of Object.entries(attributes)) {
+      if (name === "ACL" || name === "createdAt" || name === "updatedAt") {
+        continue; // Skip common fields
+      }
+
+      let type: string;
+      switch (details.type) {
+        case "Number":
+          type = "number";
+          break;
+        case "String":
+          type = "string";
+          break;
+        case "Boolean":
+          type = "boolean";
+          break;
+        case "Date":
+          type = "Date";
+          break;
+        case "Pointer":
+          type = this.getPointerType(details);
+          break;
+        case "Relation":
+          type = this.getRelationType(schema.className, details);
+          break;
+        case "Array":
+          type = "SerializableArray";
+          break;
+        case "Object":
+          type = "SerializableObject";
+          break;
+        case "File":
+          type = "Parse.File | null";
+          break;
+        case "GeoPoint":
+          type = "Parse.GeoPoint";
+          break;
+        case "Polygon":
+          type = "Parse.Polygon";
+          break;
+        default:
+          console.warn("Type not found:", details.type);
+          type = "any";
+      }
+
+      const optional = details.required ? "" : "?";
+
+      if (type.includes(" | null") && optional) {
+        type = type.replace(" | null", "");
+      }
+      props.push(`${name}${optional}: ${type};`);
+    }
+
+    return ["{", ...props, "}"].join("\n");
+  }
+
   /**
    * Create class definition for a single class schema
    * @param schema a Parse class schema object
    * @returns a string of class definitions or null (for built-in classes if not specified in the constructor)
    */
-  generateClass(schema: Parse.RestSchema): string | null {
+  generateClass(schema: Parse.RestSchema): {
+    attributes: string;
+    constructor: string;
+    defaultValues: string;
+    className: string;
+  } | null {
     const className = schema.className;
 
     if (isBuiltIn(className) && !(className in this.builtInNames)) {
@@ -240,15 +312,12 @@ export class ParseClassGenerator {
 
     const newName = this.getTargetClassName(className);
 
-    return `
-    class ${newName} extends ${baseClass}<{\n${props.join("\n")}}> {
-    static DEFAULT_VALUES = {
-      ${defaultValues.join(",\n")}
+    return {
+      attributes: this.generateAttributes(schema),
+      constructor: this.createConstructor(schema),
+      defaultValues: defaultValues.join(",\n"),
+      className: newName,
     };
-    
-    ${this.createConstructor(schema)}
-    }
-  `;
   }
 
   /**
@@ -266,21 +335,27 @@ export class ParseClassGenerator {
     const toExport: string[] = [];
     const toRegister: string[] = [];
 
-    const classDefinitions: string[] = schemas
-      .map((schema) => {
-        const def = this.generateClass(schema);
-        if (def) {
-          const targetClassName = this.getTargetClassName(schema.className);
-          toExport.push(targetClassName);
-          const baseClass = getBaseClass(schema.className);
-          toRegister.push(
-            `${baseClass}.registerSubclass("${targetClassName}",${targetClassName});`
-          );
-        }
-        return def;
-      })
-      .filter(Boolean) as string[];
+    const classDefinitions = schemas.map((schema) => {
+      const def = this.generateClass(schema);
+      if (def) {
+        toExport.push(def.className);
+        const baseClass = getBaseClass(schema.className);
+        toRegister.push(
+          `${baseClass}.registerSubclass("${def.className}",${def.className});`
+        );
+        return `
+      class ${def?.className} extends ${baseClass}<${def.attributes}> {
+      static DEFAULT_VALUES = {
+        ${def.defaultValues}
+      };
 
+      ${this.createConstructor(schema)}
+      }
+    `;
+      } else {
+        return null;
+      }
+    });
     const helperTypes = fs.readFileSync(
       path.join(__dirname, "types.d.ts"),
       "utf8"
