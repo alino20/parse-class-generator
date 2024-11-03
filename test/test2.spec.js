@@ -44,10 +44,6 @@ describe("Test Parse Class Generator", function () {
     const fetched = TEST_SCHEMA;
 
     fetched.forEach((schema) => {
-      console.log("ClassName:", schema.className);
-      Object.entries(schema.fields).forEach(([key, value]) => {
-        console.log("Field:", key, value);
-      });
       schemas.push(schema);
     });
   });

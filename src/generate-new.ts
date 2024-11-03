@@ -89,7 +89,7 @@ export class ParseClassGenerator {
 
     if (className === "_User") {
       return `
-    constructor(attrs = {}) {
+    constructor(attrs: Partial<${newName}Attributes> = {}) {
       super({...${newName}.DEFAULT_VALUES, ...attrs});
     }
     `;
@@ -112,22 +112,22 @@ export class ParseClassGenerator {
     }
 
     return `
-    constructor(attrs:${newName}Attributes = {}) {
+    constructor(attrs: Partial<${newName}Attributes> = {}) {
       super("${newName}", {...${newName}.DEFAULT_VALUES, ...attrs});
     }
     `;
   }
 
-  private getPointerType(details: SchemaDetails) {
-    if (!details.targetClass) {
+  private getPointerType(targetClass?: string) {
+    if (!targetClass) {
       throw new Error("Target class is required for Pointer type");
     }
 
-    const baseClass = getBaseClass(details.targetClass);
-    const targetClassName = this.getTargetClassName(details.targetClass);
+    const baseClass = getBaseClass(targetClass);
+    const targetClassName = this.getTargetClassName(targetClass);
 
-    if (isBuiltIn(details.targetClass)) {
-      if (this.builtInNames[details.targetClass]) {
+    if (isBuiltIn(targetClass)) {
+      if (this.builtInNames[targetClass]) {
         return `${baseClass}<${targetClassName}Attributes> | null`;
       } else {
         return `${baseClass} | null`;
@@ -137,14 +137,15 @@ export class ParseClassGenerator {
     }
   }
 
-  private getRelationType(className: string, details: SchemaDetails) {
-    if (!details.targetClass) {
+  private getRelationType(className: string, targetClass?: string) {
+    if (!targetClass) {
       throw new Error("Target class is required for Pointer type");
     }
 
-    const thisClassName = this.getTargetClassName(className);
-    const targetClassName = this.getTargetClassName(details.targetClass);
-    return `Parse.Relation<${thisClassName}, ${targetClassName}> | null`;
+    const t1 = this.getPointerType(className).replace(" | null", "");
+    const t2 = this.getPointerType(targetClass).replace(" | null", "");
+
+    return `Parse.Relation<${t1}, ${t2}> | null`;
   }
 
   generateAttributes(schema: Parse.RestSchema): {
@@ -175,10 +176,10 @@ export class ParseClassGenerator {
           type = "Date";
           break;
         case "Pointer":
-          type = this.getPointerType(details);
+          type = this.getPointerType(details.targetClass);
           break;
         case "Relation":
-          type = this.getRelationType(schema.className, details);
+          type = this.getRelationType(schema.className, details.targetClass);
           break;
         case "Array":
           type = "SerializableArray";
@@ -202,9 +203,9 @@ export class ParseClassGenerator {
 
       const optional = details.required ? "" : "?";
 
-      if (type.includes(" | null") && optional) {
-        type = type.replace(" | null", "");
-      }
+      // if (type.includes(" | null") && optional) {
+      //   type = type.replace(" | null", "");
+      // }
       props.push(`${name}${optional}: ${type};`);
 
       if (details.required) {
