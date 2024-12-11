@@ -3,5 +3,6 @@ test/
 coverage/
 output/
 types/
+src/
 .env
 

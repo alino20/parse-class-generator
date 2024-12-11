@@ -1,11 +1,10 @@
-import Parse from "parse/node";
-import { equal } from "assert";
 import { ParseClassGenerator } from "@src/generate";
-import { describe, it } from "mocha";
-import { existsSync, rmSync } from "fs";
-import path from "path";
-import fc from "fast-check";
+import { equal } from "assert";
 import { spawnSync } from "child_process";
+import { existsSync } from "fs";
+import { describe, it } from "mocha";
+import Parse from "parse/node";
+import path from "path";
 import { TEST_SCHEMA } from "./schema";
 
 const { APP_ID, SERVER_URL, MASTER_KEY } = process.env;
@@ -17,7 +16,13 @@ const { APP_ID, SERVER_URL, MASTER_KEY } = process.env;
 const compile = (filePath) => {
   const result = spawnSync(
     "tsc",
-    ["--noEmit", "--allowSyntheticDefaultImports", `${filePath}`],
+    [
+      "--noEmit",
+      "--allowSyntheticDefaultImports",
+      "--allowJS",
+      "--checkJS",
+      `${filePath}`,
+    ],
     { shell: true }
   );
   if (result.error) {
@@ -28,7 +33,7 @@ const compile = (filePath) => {
   }
 };
 
-describe.skip("Test Parse Class Generator", function () {
+describe("Test Parse Class Generator", function () {
   Parse.initialize(APP_ID, undefined, MASTER_KEY);
   Parse.serverURL = SERVER_URL;
   /**
@@ -44,91 +49,50 @@ describe.skip("Test Parse Class Generator", function () {
     const fetched = TEST_SCHEMA;
 
     fetched.forEach((schema) => {
-      console.log("ClassName:", schema.className);
-      Object.entries(schema.fields).forEach(([key, value]) => {
-        console.log("Field:", key, value);
-      });
       schemas.push(schema);
     });
   });
 
-  describe("Built-in Classes are not modified", function () {
-    const outFilePath = path.join("types", "parse-classes.ts");
+  describe("Test Attributes File", function () {
+    const outFilePath = path.join("types", "parse-class-attributes.d.ts");
+    this.slow(5000);
 
-    it("Should create valid files", async function () {
+    let attrs = null;
+
+    it("Should create valid attributes file", async function () {
       this.timeout(10000);
       const generator = new ParseClassGenerator();
-      await generator.createTsFile(schemas, outFilePath, "node");
+      attrs = await generator.createAttributesFile(schemas, outFilePath);
       const fileExists = existsSync(outFilePath);
       equal(fileExists, true);
       compile(outFilePath);
     });
-  });
 
-  describe("test with modified built-in classes", function () {
-    const outFilePath = path.join("types", "modified-classes.ts");
-
-    /**
-     * @type {Parse.RestSchema[]}
-     */
-    const builtInSchemas = [];
-
-    this.beforeAll(async function () {
-      this.timeout(10000);
-      const fetched = await Parse.Schema.all();
-      fetched
-        .filter((schema) =>
-          ["_User", "_Role", "_Session"].includes(schema.className)
-        )
-        .forEach((schema) => {
-          builtInSchemas.push(schema);
-        });
+    it("Should create valid classes file", async function () {
+      const classesPath = path.join("types", "parse-classes.ts");
+      await attrs.createTsClassesFile(classesPath);
+      compile(classesPath);
     });
 
-    const extendedSchema = schemas.concat(builtInSchemas);
-
-    it("Should generate valid files", async function () {
-      this.timeout(0);
-      await fc.assert(
-        fc.asyncProperty(
-          fc.oneof(
-            fc.constant("CustomUser"),
-            fc.boolean(),
-            fc.constant(undefined)
-          ),
-          fc.oneof(
-            fc.constant("CustomRole"),
-            fc.boolean(),
-            fc.constant(undefined)
-          ),
-          fc.oneof(
-            fc.constant("CustomSession"),
-            fc.boolean(),
-            fc.constant(undefined)
-          ),
-
-          async (user, role, session) => {
-            const options = {
-              _User: user,
-              _Role: role,
-              _Session: session,
-            };
-            // console.log("Generating with options", options);
-            const generator = new ParseClassGenerator(options);
-
-            const timeInMS = new Date().getTime();
-
-            const uniqueFilePath = outFilePath.replace(
-              ".ts",
-              `_${timeInMS}.ts`
-            );
-
-            await generator.createTsFile(extendedSchema, uniqueFilePath);
-            compile(uniqueFilePath);
-            rmSync(uniqueFilePath);
-          }
-        )
+    it("Should create valid declarations file", async function () {
+      const declarationsPath = path.join(
+        "types",
+        "parse-class-declarations.d.ts"
       );
+      await attrs.createDeclarationsFile(declarationsPath);
+      compile(declarationsPath);
+    });
+
+    it("Should create valid jsDoc file", async function () {
+      const jsDocPath = path.join("types", "parse-jsdoc.js");
+      await attrs.createJsDocFile(jsDocPath);
+      compile(jsDocPath);
     });
   });
 });
+
+/**
+ * @type {import("../types/parse-interfaces").Post}
+ */
+const post = new Parse.Object("Post");
+post.get("author");

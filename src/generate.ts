@@ -2,22 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import Parse from "parse/node";
 import prettier from "prettier";
-
-interface SchemaDetails {
-  type: string;
-  targetClass?: string;
-  required?: boolean;
-  defaultValue?: string;
-}
-
-/**
- * Recursively create a directory at the given `path`.
- *
- * @param {String} path
- */
-function ensureDir(path: string) {
-  fs.mkdirSync(path, { recursive: true });
-}
+import { getRelativeImportPath, saveToFile } from "./functions";
 
 // Static default values for each field type
 const DEFAULT_VALUES: Record<string, unknown> = {
@@ -30,6 +15,12 @@ const DEFAULT_VALUES: Record<string, unknown> = {
   Object: {},
   File: null,
   GeoPoint: new Parse.GeoPoint(0, 0),
+};
+
+const ENV_MAP = {
+  node: "parse/node",
+  browser: "parse",
+  "react-native": "parse/react-native",
 };
 
 const PARSE_CLASSES = ["_User", "_Role", "_Session"] as const;
@@ -97,8 +88,8 @@ export class ParseClassGenerator {
 
     if (className === "_User") {
       return `
-    constructor() {
-      super(${newName}.DEFAULT_VALUES);
+    constructor(attrs: Partial<${newName}Attributes> = {}) {
+      super({...${newName}.DEFAULT_VALUES, ...attrs});
     }
     `;
     }
@@ -120,112 +111,46 @@ export class ParseClassGenerator {
     }
 
     return `
-    constructor() {
-      super("${newName}", ${className}.DEFAULT_VALUES);
+    constructor(attrs: Partial<${newName}Attributes> = {}) {
+      super("${newName}", {...${newName}.DEFAULT_VALUES, ...attrs});
     }
     `;
   }
 
-  private getPointerType(details: SchemaDetails) {
-    if (!details.targetClass) {
+  private getPointerType(targetClass?: string) {
+    if (!targetClass) {
       throw new Error("Target class is required for Pointer type");
     }
 
-    const targetClassName = this.getTargetClassName(details.targetClass);
+    const baseClass = getBaseClass(targetClass);
+    const targetClassName = this.getTargetClassName(targetClass);
 
-    return `${targetClassName} | null`;
+    if (isBuiltIn(targetClass)) {
+      if (this.builtInNames[targetClass]) {
+        return `${baseClass}<${targetClassName}Attributes> | null`;
+      } else {
+        return `${baseClass} | null`;
+      }
+    } else {
+      return `${baseClass}<${targetClassName}Attributes> | null`;
+    }
   }
 
-  private getRelationType(className: string, details: SchemaDetails) {
-    if (!details.targetClass) {
+  private getRelationType(className: string, targetClass?: string) {
+    if (!targetClass) {
       throw new Error("Target class is required for Pointer type");
     }
 
-    const thisClassName = this.getTargetClassName(className);
-    const targetClassName = this.getTargetClassName(details.targetClass);
-    return `Parse.Relation<${thisClassName}, ${targetClassName}> | null`;
+    const t1 = this.getPointerType(className).replace(" | null", "");
+    const t2 = this.getPointerType(targetClass).replace(" | null", "");
+
+    return `Parse.Relation<${t1}, ${t2}> | null`;
   }
 
-  generateAttributes(schema: Parse.RestSchema): string {
-    const attributes = schema.fields;
-    const props: string[] = [];
-
-    for (const [name, details] of Object.entries(attributes)) {
-      if (name === "ACL" || name === "createdAt" || name === "updatedAt") {
-        continue; // Skip common fields
-      }
-
-      let type: string;
-      switch (details.type) {
-        case "Number":
-          type = "number";
-          break;
-        case "String":
-          type = "string";
-          break;
-        case "Boolean":
-          type = "boolean";
-          break;
-        case "Date":
-          type = "Date";
-          break;
-        case "Pointer":
-          type = this.getPointerType(details);
-          break;
-        case "Relation":
-          type = this.getRelationType(schema.className, details);
-          break;
-        case "Array":
-          type = "SerializableArray";
-          break;
-        case "Object":
-          type = "SerializableObject";
-          break;
-        case "File":
-          type = "Parse.File | null";
-          break;
-        case "GeoPoint":
-          type = "Parse.GeoPoint";
-          break;
-        case "Polygon":
-          type = "Parse.Polygon";
-          break;
-        default:
-          console.warn("Type not found:", details.type);
-          type = "any";
-      }
-
-      const optional = details.required ? "" : "?";
-
-      if (type.includes(" | null") && optional) {
-        type = type.replace(" | null", "");
-      }
-      props.push(`${name}${optional}: ${type};`);
-    }
-
-    return ["{", ...props, "}"].join("\n");
-  }
-
-  /**
-   * Create class definition for a single class schema
-   * @param schema a Parse class schema object
-   * @returns a string of class definitions or null (for built-in classes if not specified in the constructor)
-   */
-  generateClass(schema: Parse.RestSchema): {
-    attributes: string;
-    constructor: string;
-    defaultValues: string;
-    className: string;
-  } | null {
-    const className = schema.className;
-
-    if (isBuiltIn(className) && !(className in this.builtInNames)) {
-      return null;
-    }
-
-    // Use base class from the dictionary or default to Parse.Object
-    const baseClass = getBaseClass(className);
-
+  generateAttributes(schema: Parse.RestSchema): {
+    attributes: string[];
+    defaultValues: string[];
+  } {
     const attributes = schema.fields;
     const props: string[] = [];
     const defaultValues: string[] = [];
@@ -250,10 +175,10 @@ export class ParseClassGenerator {
           type = "Date";
           break;
         case "Pointer":
-          type = this.getPointerType(details);
+          type = this.getPointerType(details.targetClass);
           break;
         case "Relation":
-          type = this.getRelationType(className, details);
+          type = this.getRelationType(schema.className, details.targetClass);
           break;
         case "Array":
           type = "SerializableArray";
@@ -277,9 +202,9 @@ export class ParseClassGenerator {
 
       const optional = details.required ? "" : "?";
 
-      if (type.includes(" | null") && optional) {
-        type = type.replace(" | null", "");
-      }
+      // if (type.includes(" | null") && optional) {
+      //   type = type.replace(" | null", "");
+      // }
       props.push(`${name}${optional}: ${type};`);
 
       if (details.required) {
@@ -297,76 +222,181 @@ export class ParseClassGenerator {
       }
     }
 
-    const newName = this.getTargetClassName(className);
-
     return {
-      attributes: this.generateAttributes(schema),
-      constructor: this.createConstructor(schema),
-      defaultValues: defaultValues.join(",\n"),
-      className: newName,
+      attributes: props,
+      defaultValues: defaultValues,
     };
   }
 
   /**
-   * create typescript file containing class defintions
-   * @param schemas your Parse schema
-   * @param filePath path to the output file
-   * @param env usage environment of decleration file.
-   *  determines the `import` statement at the top of the file.
+   * Create class definition for a single class schema
+   * @param schema a Parse class schema object
+   * @returns a string of class definitions or null (for built-in classes if not specified in the constructor)
    */
-  async createTsFile(
-    schemas: ReadonlyArray<Parse.RestSchema>,
-    filePath: string = path.join(__dirname, "ParseClasses.ts"),
-    env: "node" | "browser" | "react-native" = "node"
+  generateClass(schema: Parse.RestSchema): {
+    attributes: string[];
+    constructor: string;
+    defaultValues: string[];
+    className: string;
+  } | null {
+    const className = schema.className;
+
+    if (isBuiltIn(className) && !(className in this.builtInNames)) {
+      return null;
+    }
+
+    const newName = this.getTargetClassName(className);
+
+    const { attributes, defaultValues } = this.generateAttributes(schema);
+
+    return {
+      attributes: attributes,
+      constructor: this.createConstructor(schema),
+      defaultValues: defaultValues,
+      className: newName,
+    };
+  }
+
+  async createAttributesFile(
+    schemas: Parse.RestSchema[],
+    filePath: string = path.join(__dirname, "parse-class-attributes.d.ts")
   ) {
-    const toExport: string[] = [];
-    const toRegister: string[] = [];
-
-    const classDefinitions = schemas.map((schema) => {
-      const def = this.generateClass(schema);
-      if (def) {
-        toExport.push(def.className);
-        const baseClass = getBaseClass(schema.className);
-        toRegister.push(
-          `${baseClass}.registerSubclass("${def.className}",${def.className});`
-        );
-        return `
-      class ${def?.className} extends ${baseClass}<${def.attributes}> {
-      static DEFAULT_VALUES = {
-        ${def.defaultValues}
-      };
-
-      ${this.createConstructor(schema)}
-      }
-    `;
-      } else {
-        return null;
-      }
-    });
     const helperTypes = fs.readFileSync(
       path.join(__dirname, "types.d.ts"),
       "utf8"
     );
 
-    const envMap = {
-      node: "parse/node",
-      browser: "parse",
-      "react-native": "parse/react-native",
-    };
+    const classes = schemas
+      .map((schema) => this.generateClass(schema))
+      .filter((def) => def !== null);
 
-    const parseImport = `import Parse from "${envMap[env]}"`;
+    const attributesContent = classes
+      .map((classData) => {
+        const { attributes } = classData;
+        return `export interface ${classData.className}Attributes {\n${attributes.join(
+          "\n"
+        )}\n}`;
+      })
+      .join("\n");
 
-    const output = `${parseImport}\n\n
-    ${helperTypes}\n\n
-    ${classDefinitions.join("\n")}
-    export const registerAll = ()=>{${toRegister.join("\n")}};\n
-    export { ${toExport.join(", ")} };
-`;
+    const output = `${helperTypes}\n\n${attributesContent}\n`;
 
     const pretty = await prettier.format(output, { parser: "typescript" });
-    const directory = path.parse(filePath).dir;
+    saveToFile(filePath, pretty);
 
-    ensureDir(directory);
-    fs.writeFileSync(filePath, pretty);
+    const attributesFilePath = filePath;
+
+    return {
+      createTsClassesFile: async (
+        classesFilepath: string,
+        env: "node" | "browser" | "react-native" = "node"
+      ) => {
+        const toExport: string[] = [];
+        const toRegister: string[] = [];
+        const classDefs: string[] = [];
+
+        classes.forEach((classData) => {
+          const { constructor, defaultValues, className } = classData;
+
+          toExport.push(className);
+
+          const baseClass = getBaseClass(className);
+          toRegister.push(
+            `${baseClass}.registerSubclass("${className}",${className});`
+          );
+
+          const def = `class ${className} extends ${baseClass}<${className}Attributes> {
+          static DEFAULT_VALUES = {
+            ${defaultValues.join(",\n")}
+          };
+          ${constructor}
+          }`;
+
+          classDefs.push(def);
+        });
+
+        const parseImport = `import Parse from "${ENV_MAP[env]}"`;
+
+        const attrsRelativePath = getRelativeImportPath(
+          classesFilepath,
+          attributesFilePath
+        );
+        const attrsImport = `import { ${classes
+          .map((c) => c.className + "Attributes")
+          .join(", ")} } from "${attrsRelativePath}";`;
+        const output = `${parseImport}\n
+        ${attrsImport}\n\n
+        ${classDefs.join("\n")}
+        export const registerAll = ()=>{${toRegister.join("\n")}};\n
+        export { ${toExport.join(", ")} };
+        `;
+        const pretty = await prettier.format(output, { parser: "typescript" });
+        saveToFile(classesFilepath, pretty);
+      },
+      createDeclarationsFile: async (
+        declarationFilepath: string
+        // env: "node" | "browser" | "react-native" = "node"
+      ) => {
+        const interfaces: string[] = [];
+        const toExport: string[] = [];
+
+        classes.forEach((classData) => {
+          const { className } = classData;
+          const baseClass = getBaseClass(className);
+
+          const def = `interface ${className} extends ${baseClass}<${className}Attributes> {}`;
+          interfaces.push(def);
+          toExport.push(className);
+        });
+
+        const attrsRelativePath = getRelativeImportPath(
+          declarationFilepath,
+          attributesFilePath
+        );
+
+        const attrsImport = `import { ${classes
+          .map((c) => c.className + "Attributes")
+          .join(", ")} } from "${attrsRelativePath}";`;
+        const output = `${attrsImport}\n\n
+        ${interfaces.join("\n")}
+        export { ${toExport.join(", ")} };
+        `;
+        const pretty = await prettier.format(output, { parser: "typescript" });
+        saveToFile(declarationFilepath, pretty);
+      },
+      createJsDocFile: async (
+        jsDocFilepath: string,
+        env: "node" | "browser" | "react-native" = "node"
+      ) => {
+        const attrsRelativePath = getRelativeImportPath(
+          jsDocFilepath,
+          attributesFilePath
+        );
+
+        const typeDefs: string[] = [];
+
+        classes.forEach((classData) => {
+          const { className } = classData;
+          const baseClass = getBaseClass(className);
+
+          const def = `* @typedef {${baseClass}<Partial<import("${attrsRelativePath}").${className}Attributes>>} ${className}`;
+          typeDefs.push(def);
+        });
+
+        const parseImport = `import Parse from "${ENV_MAP[env]}"`;
+
+        const output = `
+        ${parseImport}\n
+        /**
+        ${typeDefs.join("\n")}
+        */
+       
+        export {};
+        `;
+
+        const pretty = await prettier.format(output, { parser: "typescript" });
+        saveToFile(jsDocFilepath, pretty);
+      },
+    };
   }
 }
