@@ -1,10 +1,11 @@
 {
   "name": "parse-class-generator",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Tool to generate Typescript class declarations automatically from schema",
-  "main": "src/index.ts",
+  "main": "index.js",
   "scripts": {
-    "build": "npm run clean && tsc && npm run copy",
+    "prebuild": "npm run clean && npm run copy",
+    "build": "tsc",
     "test": "mocha",
     "clean": "rimraf ./dist",
     "copy": "copyfiles -u 1 ./src/types.d.ts ./dist/"
