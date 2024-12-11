@@ -55,12 +55,12 @@ describe("Test Parse Class Generator", function () {
 
   describe("Test Attributes File", function () {
     const outFilePath = path.join("types", "parse-class-attributes.d.ts");
+    this.timeout(10000);
     this.slow(5000);
 
     let attrs = null;
 
     it("Should create valid attributes file", async function () {
-      this.timeout(10000);
       const generator = new ParseClassGenerator();
       attrs = await generator.createAttributesFile(schemas, outFilePath);
       const fileExists = existsSync(outFilePath);
