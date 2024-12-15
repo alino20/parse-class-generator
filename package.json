@@ -1,6 +1,6 @@
 {
   "name": "parse-class-generator",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Tool to generate Typescript class declarations automatically from schema",
   "main": "index.js",
   "scripts": {
