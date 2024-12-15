@@ -2,7 +2,7 @@
 
 [![npm version](https://badge.fury.io/js/parse-class-generator.svg)](https://badge.fury.io/js/parse-class-generator)
 
-Generate Typescript class defintions and declaration files for your Parse project. this package automatically creates the required files to develop your application with Javascript/Typescript in a type-safe manner, and also get code completion.
+Generate Typescript class definitions and declaration files for your Parse project. this package automatically creates the required files to develop your application with Javascript/Typescript in a type-safe manner, and also get code completion.
 
 ## Installation
 
@@ -33,17 +33,27 @@ const createTypes = async () => {
   const schemas = await Parse.Schema.all();
 
   const generator = new ParseClassGenerator();
-  await generator.createTsFile(schemas, "./src/parse/classes", "node");
+  await generator
+    /* Create a file defining each class attributes */
+    .createAttributesFile(schemas, "types/attributes.d.ts")
+    .then(async (attr) => {
+      /* Create declaration file containing only interfaces*/
+      await attr.createDeclarationsFile("types/parse-declarations.d.ts");
+      /* Create a typescript file with ParseObject classes */
+      await attr.createTsClassesFile("types/parse-classes.ts");
+      /* Create a JSDoc file */
+      await attr.createJsDocFile("types/parse-classes.js");
+    });
 };
 
 createTypes().then(() => {
-  console.log("created parse classes");
+  console.log("created parse definitions");
 });
 ```
 
 For an easy start, add the script above to a js file and assign a script to execute it inside `package.json` file.
 
-## Example Schema
+### Example Schema
 
 ```json
 [
@@ -67,7 +77,7 @@ For an easy start, add the script above to a js file and assign a script to exec
         "type": "Date",
       },
     },
-    "classLevelPermissions": {},
+    "classLevelPermissions": {}
   },
   {
     "className": "Comment",
@@ -87,14 +97,14 @@ For an easy start, add the script above to a js file and assign a script to exec
         "type": "Object",
       },
     },
-    "classLevelPermissions": {},
-  },
-];
+    "classLevelPermissions": {}
+  }
+]
 ```
 
-```typescript
-import Parse from "parse/node";
+### Example of generated attributes file
 
+```typescript
 export type Primitive =
   | undefined
   | null
@@ -110,33 +120,59 @@ export type SerializableArray = ReadonlyArray<Serializable>;
 
 export type SerializableObject = Readonly<{ [key: string]: Serializable }>;
 
-class Post extends Parse.Object<{
+export interface PostAttributes {
   title?: string;
   content?: string;
-  author?: Parse.User;
+  author?: Parse.User | null;
   tags?: SerializableArray;
   publishDate?: Date;
-}> {
-  static DEFAULT_VALUES = {};
-
-  constructor() {
-    super("Post", Post.DEFAULT_VALUES);
-  }
+  editors?: Parse.Relation<Parse.Object<PostAttributes>, Parse.User> | null;
 }
-
-class Comment extends Parse.Object<{
-  content?: string;
-  post?: Post;
-  author?: Parse.User;
+export interface CommentAttributes {
+  text: string;
+  post: Parse.Object<PostAttributes> | null;
+  author?: Parse.User | null;
   details?: SerializableObject;
-}> {
+}
+```
+
+- Some utility types are added for better typing of `Array` and `Object` fields.
+
+### Example of generated declaration file
+
+```typescript
+import { PostAttributes, CommentAttributes } from "./attributes";
+
+interface Post extends Parse.Object<PostAttributes> {}
+
+interface Comment extends Parse.Object<CommentAttributes> {}
+export { Post, Comment };
+```
+
+### Example of generated classes
+
+```typescript
+import Parse from "parse/node";
+
+import { PostAttributes, CommentAttributes } from "./attributes";
+
+class Post extends Parse.Object<PostAttributes> {
   static DEFAULT_VALUES = {};
 
-  constructor() {
-    super("Comment", Comment.DEFAULT_VALUES);
+  constructor(attrs: Partial<PostAttributes> = {}) {
+    super("Post", { ...Post.DEFAULT_VALUES, ...attrs });
   }
 }
+class Comment extends Parse.Object<CommentAttributes> {
+  static DEFAULT_VALUES = {
+    text: "",
+    post: null,
+  };
 
+  constructor(attrs: Partial<CommentAttributes> = {}) {
+    super("Comment", { ...Comment.DEFAULT_VALUES, ...attrs });
+  }
+}
 export const registerAll = () => {
   Parse.Object.registerSubclass("Post", Post);
   Parse.Object.registerSubclass("Comment", Comment);
@@ -145,8 +181,20 @@ export const registerAll = () => {
 export { Post, Comment };
 ```
 
-- Some utility types are added for better typing of `Array` and `Object` fields.
 - a `registerAll` function is also exported for convenience. Use it before `Parse.initialize` to register all sub-classes.
+
+### Example of generated JSDoc file
+
+```javascript
+import Parse from "parse/node";
+
+/**
+ * @typedef {Parse.Object<Partial<import("./attributes").PostAttributes>>} Post
+ * @typedef {Parse.Object<Partial<import("./attributes").CommentAttributes>>} Comment
+ */
+
+export {};
+```
 
 ## API
 
@@ -156,10 +204,9 @@ class ParseClassGenerator {
 
   generateClass(schema: Parse.RestSchema): string | null;
 
-  createTsFile(
+  createAttributesFile(
     schemas: ReadonlyArray<Parse.RestSchema>,
-    filePath?: string,
-    env?: "node" | "browser" | "react-native"
+    filePath?: string
   ): Promise<void>;
 }
 ```
@@ -180,12 +227,14 @@ class ParseClassGenerator {
 
   ***
 
-`createTsFile`: create typescript file containing class defintions
+`createAttributesFile`: create a typescript file containing attributes of each Parse class
 
 - `schemas`: an array of `Parse.RestSchema`
 - `filePath`: the output `.ts` file path
-- `env`: usage environment of decleration file.
-  - determines the `import` statement at the top of the file.
+- **Returns** An object with the following functions:
+  - `createDeclarationsFile` to create a file with interfaces only.
+  - `createTsClassesFile` to create a file with classes that can be instantiated.
+  - `createJsDocFile` to create a JavaScript file with JSDoc definition of classes.
 
 ## Examples
 

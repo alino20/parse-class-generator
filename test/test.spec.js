@@ -1,7 +1,7 @@
 import { ParseClassGenerator } from "@src/generate";
 import { equal } from "assert";
 import { spawnSync } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, readdirSync, unlinkSync } from "fs";
 import { describe, it } from "mocha";
 import Parse from "parse/node";
 import path from "path";
@@ -33,6 +33,33 @@ const compile = (filePath) => {
   }
 };
 
+const getGeneratedFiles = () => {
+  const typesDir = "types";
+
+  // Get all files in types directory
+  const files = readdirSync(typesDir);
+
+  // Filter for generated parse class files
+  const generatedFiles = files.filter(
+    (file) =>
+      file.startsWith("parse-") &&
+      (file.endsWith(".ts") || file.endsWith(".js") || file.endsWith(".d.ts"))
+  );
+
+  return generatedFiles.map((file) => path.join(typesDir, file));
+};
+
+// Delete all generated files
+const deleteGeneratedFiles = () => {
+  const files = getGeneratedFiles();
+
+  files.forEach((filePath) => {
+    if (existsSync(filePath)) {
+      unlinkSync(filePath);
+    }
+  });
+};
+
 describe("Test Parse Class Generator", function () {
   Parse.initialize(APP_ID, undefined, MASTER_KEY);
   Parse.serverURL = SERVER_URL;
@@ -51,6 +78,10 @@ describe("Test Parse Class Generator", function () {
     fetched.forEach((schema) => {
       schemas.push(schema);
     });
+  });
+
+  this.afterAll(function () {
+    deleteGeneratedFiles();
   });
 
   describe("Test Attributes File", function () {
@@ -90,9 +121,3 @@ describe("Test Parse Class Generator", function () {
     });
   });
 });
-
-/**
- * @type {import("../types/parse-interfaces").Post}
- */
-const post = new Parse.Object("Post");
-post.get("author");
