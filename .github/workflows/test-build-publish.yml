@@ -47,8 +47,10 @@ jobs:
       - run: npm run build
       - run: npm audit signatures
 
-      - name: Deploy the package
+      - run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Deploy the package
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run publish
