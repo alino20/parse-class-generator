@@ -13,8 +13,9 @@
     "allowJs": true,
     "moduleResolution": "node",
     "strict": true,
-    "declaration": true
+    "declaration": true,
   },
+  
   "exclude": ["node_modules", "dist"],
   "include": ["./src/**/*.ts", "./src/**/*.js"]
 }
