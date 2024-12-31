@@ -327,7 +327,6 @@ export class ParseClassGenerator {
         const output = `${parseImport}\n
         ${attrsImport}\n\n
         ${classDefs.join("\n")}
-        export const registerAll = ()=>{${toRegister.join("\n")}};\n
         export { ${toExport.join(", ")} };
         `;
         const pretty = await prettier.format(output, { parser: "typescript" });
