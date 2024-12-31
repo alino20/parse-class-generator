@@ -173,15 +173,9 @@ class Comment extends Parse.Object<CommentAttributes> {
     super("Comment", { ...Comment.DEFAULT_VALUES, ...attrs });
   }
 }
-export const registerAll = () => {
-  Parse.Object.registerSubclass("Post", Post);
-  Parse.Object.registerSubclass("Comment", Comment);
-};
 
 export { Post, Comment };
 ```
-
-- a `registerAll` function is also exported for convenience. Use it before `Parse.initialize` to register all sub-classes.
 
 ### Example of generated JSDoc file
 
