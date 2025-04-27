@@ -1,4 +1,3 @@
-// import { ParseClassGenerator } from "../dist";
 import { TEST_SCHEMA } from "./schema";
 
 describe("Test Build Package", function () {
